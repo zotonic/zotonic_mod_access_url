@@ -1,15 +1,15 @@
 %% @author Marc Worrell <marc@worrell.nl>
-%% @copyright 2014-2016 Marc Worrell
+%% @copyright 2014-2020 Marc Worrell
 %% @doc Access an url with the credentials of another user.
 
-%% Copyright 2014-2016 Marc Worrell
+%% Copyright 2014-2020 Marc Worrell
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
 %% You may obtain a copy of the License at
-%% 
+%%
 %%     http://www.apache.org/licenses/LICENSE-2.0
-%% 
+%%
 %% Unless required by applicable law or agreed to in writing, software
 %% distributed under the License is distributed on an "AS IS" BASIS,
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -200,6 +200,6 @@ filter_args([{K,V}|Args], Acc) ->
             filter_args(Args, [{K1,V1}|Acc])
     end.
 
-%% Outlook.com decodes en re-combines urls, without percent-encoding.
+%% Outlook.com decodes and re-combines urls without doing percent-encoding.
 fix_outlook_sig(Sig) ->
-    binary:replace(Sig, <<" ">>, <<"+">>).
+    binary:replace(Sig, <<" ">>, <<"+">>, [ global ]).
