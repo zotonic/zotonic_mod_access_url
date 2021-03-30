@@ -120,7 +120,7 @@ logon_if_sigok(Context) ->
                             Context1 = z_context:set(is_z_access_url, true, Context),
                             z_context:set_noindex_header(true, z_acl:logon(UserId, Context1));
                         false ->
-                            lager:warning("Non matching signature on request ~p", [wrq:raw_path(z_context:get_reqdata(Context))]),
+                            lager:warning("Non matching signature on request ~p", [cowmachine_req:raw_path(Context)]),
                             throw({stop_request, 403})
                     end;
                 {error, enoent} ->
