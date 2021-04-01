@@ -1,8 +1,8 @@
 %% @author Marc Worrell <marc@worrell.nl>
-%% @copyright 2014-2020 Marc Worrell
+%% @copyright 2014-2021 Marc Worrell
 %% @doc Access an url with the credentials of another user.
 
-%% Copyright 2014-2020 Marc Worrell
+%% Copyright 2014-2021 Marc Worrell
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -138,7 +138,7 @@ is_valid_signature(Sig, Dispatch, Args, Token, Nonce, Secret) ->
         Sig1 ->
             true;
         _NonMatchSig ->
-            % For a short time there was a version where use_absolute_url
+            % For a short time there was a version where (old) use_absolute_url
             % was not filtered from the signature generation.
             % Retry with the use_absolute_url argument to check for these
             % wrongly generated signatures.
@@ -186,7 +186,10 @@ filter_args([{zotonic_dispatch_path_rewrite,_}|Args], Acc) ->
     filter_args(Args, Acc);
 filter_args([{star, V}|Args], Acc) ->
     V1 = z_convert:to_binary( cow_qs:urldecode(V) ),
-    filter_args(Args, [{<<"star">>,V1}|Acc]);
+    filter_args(Args, [{<<"*">>,V1}|Acc]);
+filter_args([{<<"*">>, V}|Args], Acc) ->
+    V1 = z_convert:to_binary( cow_qs:urldecode(V) ),
+    filter_args(Args, [{<<"*">>,V1}|Acc]);
 filter_args([{K,V}|Args], Acc) ->
     K1 = z_convert:to_binary(K),
     case K1 of
