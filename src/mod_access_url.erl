@@ -29,6 +29,7 @@
     observe_request_context/3
     ]).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("zotonic_core/include/zotonic.hrl").
 
 observe_url_rewrite(#url_rewrite{dispatch=image, args=Args}, Url, Context) ->
@@ -120,11 +121,11 @@ logon_if_sigok(Context) ->
                             Context1 = z_context:set(is_z_access_url, true, Context),
                             z_context:set_noindex_header(true, z_acl:logon(UserId, Context1));
                         false ->
-                            lager:warning("Non matching signature on request ~p", [cowmachine_req:raw_path(Context)]),
+                            ?LOG_WARNING("Non matching signature on request ~p", [cowmachine_req:raw_path(Context)]),
                             throw({stop_request, 403})
                     end;
                 {error, enoent} ->
-                    lager:info("Unknown url_access_token \"~p\"", [Token]),
+                    ?LOG_INFO("Unknown url_access_token \"~p\"", [Token]),
                     Context
             end
     end.
