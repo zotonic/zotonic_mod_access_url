@@ -2,7 +2,7 @@
     {description, "Give access to resources via signed URLs"},
     {vsn, git},
     {registered, []},
-    {applications, [kernel, stdlib, zotonic_core, zotonic_mod_maxclass]},
+    {applications, [kernel, stdlib, zotonic_core]},
     {env, []},
     {modules, []},
     {maintainers, []},
