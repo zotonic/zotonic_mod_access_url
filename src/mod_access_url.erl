@@ -1,8 +1,9 @@
 %% @author Marc Worrell <marc@worrell.nl>
-%% @copyright 2014-2021 Marc Worrell
+%% @copyright 2014-2024 Marc Worrell
 %% @doc Access an url with the credentials of another user.
+%% @end
 
-%% Copyright 2014-2021 Marc Worrell
+%% Copyright 2014-2024 Marc Worrell
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -94,6 +95,8 @@ user_secret(UserId, Context) ->
             {ok, Token, Secret}
     end.
 
+token_user(<<>>, _Context) ->
+    {error, enoent};
 token_user(Token, Context) ->
     case m_identity:lookup_by_type_and_key(?MODULE, Token, Context) of
         undefined ->
@@ -121,11 +124,25 @@ logon_if_sigok(Context) ->
                             Context1 = z_context:set(is_z_access_url, true, Context),
                             z_context:set_noindex_header(true, z_acl:logon(UserId, Context1));
                         false ->
-                            ?LOG_WARNING("Non matching signature on request ~p", [cowmachine_req:raw_path(Context)]),
-                            throw({stop_request, 403})
+                            ?LOG_WARNING(#{
+                                in => zotonic_mod_access_url,
+                                text => <<"Non matching signature on request">>,
+                                result => error,
+                                reason => signature_mismatch,
+                                token => Token,
+                                user_id => UserId,
+                                path => cowmachine_req:raw_path(Context)
+                            }),
+                            Context
                     end;
                 {error, enoent} ->
-                    ?LOG_INFO("Unknown url_access_token \"~p\"", [Token]),
+                    ?LOG_INFO(#{
+                        in => zotonic_mod_access_url,
+                        text => <<"Unknown url_access_token">>,
+                        result => error,
+                        reason => unknown_user_token,
+                        token => Token
+                    }),
                     Context
             end
     end.
@@ -134,17 +151,26 @@ is_valid_signature(Sig, Dispatch, Args, Token, Nonce, Secret) ->
     ArgsFiltered = filter_args(Args, []),
     Sig1 = fix_outlook_sig(Sig),
     case sign_args(Dispatch, ArgsFiltered, Token, Nonce, Secret) of
-        Sig ->
-            true;
-        Sig1 ->
-            true;
-        _NonMatchSig ->
-            % For a short time there was a version where (old) use_absolute_url
-            % was not filtered from the signature generation.
-            % Retry with the use_absolute_url argument to check for these
-            % wrongly generated signatures.
-            ArgsFiltered1 = lists:sort([{<<"use_absolute_url">>, <<"true">>}|ArgsFiltered]),
-            sign_args(Dispatch, ArgsFiltered1, Token, Nonce, Secret) =:= Sig
+        Sig -> true;
+        Sig1 -> true;
+        _ ->
+            % Check for the old versions which used term_to_binary for the signature generation.
+            case sign_args_old_v1(Dispatch, ArgsFiltered, Token, Nonce, Secret) of
+                Sig -> true;
+                Sig1 -> true;
+                _ ->
+                    case sign_args_old_v2(Dispatch, ArgsFiltered, Token, Nonce, Secret) of
+                        Sig -> true;
+                        Sig1 -> true;
+                        _ ->
+                            % For a short time there was a version where (old) use_absolute_url
+                            % was not filtered from the signature generation.
+                            % Retry with the use_absolute_url argument to check for these
+                            % wrongly generated signatures.
+                            ArgsFiltered1 = lists:sort([{<<"use_absolute_url">>, <<"true">>}|ArgsFiltered]),
+                            sign_args_old_v1(Dispatch, ArgsFiltered1, Token, Nonce, Secret) =:= Sig
+                    end
+            end
     end.
 
 
@@ -152,6 +178,21 @@ sign(Dispatch, Args, Token, Nonce, Secret) ->
     sign_args(Dispatch, filter_args(Args, []), Token, Nonce, Secret).
 
 sign_args(Dispatch, Args, Token, Nonce, Secret) ->
+    Data = iolist_to_binary([
+                    flatten_args(Args), $:,
+                    <<"signed:">>,
+                    z_convert:to_binary(Dispatch), $:,
+                    z_convert:to_binary(Nonce), $:,
+                    z_convert:to_binary(Token), $:,
+                    z_convert:to_binary(Secret)
+                ]),
+    base64:encode(crypto:hash(sha256, Data)).
+
+flatten_args(Args) ->
+    [ [ K, 0, V, 0 ] || {K, V} <- Args ].
+
+%% Older versions used the term_to_binary version 1.
+sign_args_old_v1(Dispatch, Args, Token, Nonce, Secret) ->
     Data = term_to_binary([
                     Args,
                     signed,
@@ -159,7 +200,19 @@ sign_args(Dispatch, Args, Token, Nonce, Secret) ->
                     z_convert:to_binary(Nonce),
                     z_convert:to_binary(Token),
                     z_convert:to_binary(Secret)
-                ]),
+                ], [ {minor_version, 1} ]),
+    base64:encode(crypto:hash(sha256, Data)).
+
+%% Older versions used for a short time term_to_binary version 2 on OTP26
+sign_args_old_v2(Dispatch, Args, Token, Nonce, Secret) ->
+    Data = term_to_binary([
+                    Args,
+                    signed,
+                    z_convert:to_binary(Dispatch),
+                    z_convert:to_binary(Nonce),
+                    z_convert:to_binary(Token),
+                    z_convert:to_binary(Secret)
+                ], [ {minor_version, 2} ]),
     base64:encode(crypto:hash(sha256, Data)).
 
 get_q_all(Context) ->
