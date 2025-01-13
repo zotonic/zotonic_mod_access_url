@@ -216,7 +216,11 @@ sign_args_old_v2(Dispatch, Args, Token, Nonce, Secret) ->
     base64:encode(crypto:hash(sha256, Data)).
 
 get_q_all(Context) ->
-    z_context:get_q_all_noz(Context).
+    Args = z_context:get_q_all_noz(Context),
+    case z_context:get_q(<<"*">>, Context) of
+        undefined -> Args;
+        Path -> [ {<<"*">>, Path} | Args ]
+    end.
 
 filter_args([], Acc) ->
     lists:sort(Acc);
