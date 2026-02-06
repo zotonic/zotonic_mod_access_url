@@ -401,7 +401,7 @@ hash_term_v1(SignedData) ->
     crypto:hash(sha256, Data).
 
 hash_term_v2(SignedData) ->
-    Data = term_to_binary(SignedData, [ {minor_version, 1} ]),
+    Data = term_to_binary(SignedData, [ {minor_version, 2} ]),
     crypto:hash(sha256, Data).
 
 signed_data(Dispatch, Args, Token, Nonce, Secret, ValidFor) when ValidFor =:= <<>>; ValidFor =:= undefined ->
