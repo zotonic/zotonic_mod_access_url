@@ -47,7 +47,7 @@
 
 
 %% @doc Rewrite image URLs to also allow access, this prevents the problem that
-%% images might not be visible on pages that are accessed with an access url becaus
+%% images might not be visible on pages that are accessed with an access url because
 %% the image resources are not visible to the logged on user.
 %%
 %% If the `z_access_url` argument is set on the URL, then a token will be added to
