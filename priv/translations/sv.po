@@ -1,0 +1,121 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+# NB: Consider using poEdit <http://poedit.sourceforge.net>
+#
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"POT-Creation-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"PO-Revision-Date: 2026-02-06 16:52+0100\n"
+"Last-Translator: Marc Worrell <marc@worrell.nl>\n"
+"Language-Team: \n"
+"Language: sv\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.8\n"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:72
+msgid "Copied to clipboard"
+msgstr "Kopierat till urklipp"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:61
+msgid "Copy to clipboard"
+msgstr "Kopiera till urklipp"
+
+#: zotonic_mod_access_url/src/support/access_url_admin.erl:39
+#, fuzzy
+msgid "Could not generate the URL to share this resource"
+msgstr "Det gick inte att generera URL:en för att dela den här resursen."
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:27
+msgid "Day"
+msgstr "Dag"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:26
+msgid "Forever"
+msgstr "För alltid"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:36
+msgid "Generate link"
+msgstr "Generera länk"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:8
+#, fuzzy
+msgid "Help about sharing links"
+msgstr "Hjälp om delning av länkar"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:29
+msgid "Month"
+msgstr "Månad"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:11
+msgid "Need more help?"
+msgstr "Behöver du mer hjälp?"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:9
+#, fuzzy
+msgid ""
+"Share a link to this page. Anyone with the link can access the page using "
+"your view permissions. The link is valid for the defined duration or "
+"indefinitely."
+msgstr ""
+"Dela en länk till den här sidan. Alla som har länken kan komma åt sidan "
+"med dina visningsbehörigheter. Länken är giltig under den angivna tiden "
+"eller på obestämd tid."
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:20
+#, fuzzy
+msgid ""
+"Share a link to this page. Anyone with the link can view the page and the "
+"images on it with your viewing permissions. They will not receive any "
+"additional update or edit permissions."
+msgstr ""
+"Dela en länk till den här sidan. Alla som har länken kan visa sidan och "
+"bilderna på den med dina visningsbehörigheter. De får inga ytterligare "
+"uppdaterings- eller redigeringsbehörigheter."
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:4
+#, fuzzy
+msgid "Share link to this page"
+msgstr "Dela länk till denna sida"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:32
+#, fuzzy
+msgid "Six months"
+msgstr "Sex månader"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:31
+msgid "Three months"
+msgstr "Tre månader"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:30
+msgid "Two months"
+msgstr "Två månader"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:24
+msgid "Valid for"
+msgstr "Giltig i"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:28
+msgid "Week"
+msgstr "Vecka"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:33
+msgid "Year"
+msgstr "År"
+
+#: zotonic_mod_access_url/src/support/access_url_admin.erl:45
+#, fuzzy
+msgid "You don't have permission to share this resource"
+msgstr "Du har inte behörighet att dela den här resursen."
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:84
+#, fuzzy
+msgid "You must be able to view the page to see it."
+msgstr "Du måste kunna visa sidan för att se den."
