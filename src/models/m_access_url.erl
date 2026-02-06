@@ -44,7 +44,7 @@ m_get([ <<"reload_needed">> | Rest ], _Msg, Context) ->
                     false
             end;
         false ->
-            ok
+            false
     end,
     {ok, {IsReloadNeeded, Rest}}.
 
