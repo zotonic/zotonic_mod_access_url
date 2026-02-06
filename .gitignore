@@ -1,2 +1,2 @@
 .DS_Store
-priv/translations/template
+priv/translations/*.mo

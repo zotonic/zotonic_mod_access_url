@@ -1,0 +1,143 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+# NB: Consider using poEdit <http://poedit.sourceforge.net>
+#
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"POT-Creation-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:72
+msgid ""
+"Copied to clipboard"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:61
+msgid ""
+"Copy to clipboard"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/src/support/access_url_admin.erl:39
+msgid ""
+"Could not generate the URL to share this resource"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:27
+msgid ""
+"Day"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:26
+msgid ""
+"Forever"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:36
+msgid ""
+"Generate link"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:8
+msgid ""
+"Help about sharing links"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:29
+msgid ""
+"Month"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:11
+msgid ""
+"Need more help?"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:9
+msgid ""
+"Share a link to this page. Anyone with the link can access the page using "
+"your view permissions. The link is valid for the defined duration or "
+"indefinitely."
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:20
+msgid ""
+"Share a link to this page. Anyone with the link can view the page and the "
+"images on it with your viewing permissions. They will not receive any "
+"additional update or edit permissions."
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:4
+msgid ""
+"Share link to this page"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:32
+msgid ""
+"Six months"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:31
+msgid ""
+"Three months"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:30
+msgid ""
+"Two months"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:24
+msgid ""
+"Valid for"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:28
+msgid ""
+"Week"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:33
+msgid ""
+"Year"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/src/support/access_url_admin.erl:45
+msgid ""
+"You don't have permission to share this resource"
+msgstr ""
+""
+
+#: zotonic_mod_access_url/priv/templates/_admin_edit_sidebar.tpl:84
+msgid ""
+"You must be able to view the page to see it."
+msgstr ""
+""
