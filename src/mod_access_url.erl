@@ -127,6 +127,8 @@ observe_acl_is_allowed(#acl_is_allowed{ action = view, object = Id } = AclCheck,
                         false -> undefined;
                         undefined -> undefined
                     end;
+                #context{} ->
+                    undefined;
                 undefined ->
                     undefined
             end
