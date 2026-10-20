@@ -1,0 +1,54 @@
+name: Zotonic module checks
+
+# Check PRs targeting main and run again after merge; exclude direct pushes.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.event.action != 'closed' || github.event.pull_request.merged == true
+    name: Compile, EUnit and Dialyzer on OTP 28
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container:
+      image: erlang:28.5
+    defaults:
+      run:
+        working-directory: zotonic-master
+    steps:
+      - name: Check out Zotonic master
+        uses: actions/checkout@v7
+        with:
+          repository: zotonic/zotonic
+          ref: master
+          path: zotonic-master
+          persist-credentials: false
+
+      - name: Check out the module
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.sha }}
+          path: zotonic-master/apps_user/zotonic_mod_access_url
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends libseccomp-dev
+
+      - name: Compile Zotonic and the module
+        run: make
+
+      # Rebar's test profile defines TEST, enabling the inline EUnit tests.
+      # These module tests do not require a running site or database.
+      - name: Run module tests
+        run: ./rebar3 eunit --application=zotonic_mod_access_url --verbose
+
+      - name: Run Dialyzer in the Zotonic umbrella
+        run: make dialyzer

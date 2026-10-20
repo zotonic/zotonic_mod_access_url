@@ -19,11 +19,120 @@
 
 -module(mod_access_url).
 
+-moduledoc(#{
+    zotonic_keywords => [
+        "reference", "module", "site_administrator", "backend_developer",
+        "frontend_developer", "authorization_and_access_control", "security", "url"
+    ]
+}).
+-moduledoc("
+Share protected pages, images and feeds using signed URLs with the signing user's
+view permissions. Recipients do not need to log in as that user. Typical uses
+include private calendar feeds, HTML certificate rendering and sharing a survey
+with people who do not have an account.
+
+## Setup and administration
+
+Install the `zotonic_mod_access_url` application and enable `mod_access_url` for
+the site. The module adds a **Share link to this page** widget to the admin edit
+sidebar. An authenticated user who can view the resource can generate and copy
+a link, choosing a duration or an indefinite link.
+
+There are no module configuration keys. Signing secrets are created on demand
+as `mod_access_url` identities associated with the signing user.
+
+## Generate a signed URL
+
+Add `z_access_url` to a dispatch URL generated in an authenticated context:
+
+```django
+{% url page id=id z_access_url absolute_url %}
+```
+
+To make the link valid for one hour:
+
+```django
+{% url page id=id z_access_url z_access_url_valid_for=3600 absolute_url %}
+```
+
+`z_access_url_valid_for` accepts an integer duration in seconds or a binary date
+expression understood by `z_datetime:to_datetime/1`, such as `+day` or `+week`.
+Omitting it creates a link without an expiry. The generated query contains the
+absolute expiry timestamp; do not pass that timestamp back as an integer duration.
+
+The same arguments can be passed to `z_dispatcher:url_for/3`, or set on a context
+when generating resource page URLs. `m_access_url:generate_url/2,3` provides a
+convenience API for absolute resource URLs. See `m_access_url` for model calls.
+
+An integer `z_access_url` selects another signing user only when the caller can
+edit that user's resource. Signing explicitly for user 1 requires the caller to
+be user 1. Without a signing user, the URL is returned unsigned.
+
+## Permissions and respondent identity
+
+A valid link supplies an additional context for resource and property **view**
+checks. It does not replace the visitor's logged-in identity or grant edit,
+update or delete permissions. Invalid, expired and unknown tokens leave normal
+request permissions in effect.
+
+For surveys using the standard submission handler, an anonymous recipient's
+answers remain anonymous in the `user_id` column and may be associated with a
+browser session. A logged-in recipient's answers belong to that recipient, not
+the signer. Survey settings and custom submission handlers still apply; a signed
+link is not a general authorization to perform writes.
+
+The module runs at priority 10 so its view grants can be evaluated before an ACL
+module returns a denial. Custom ACL integrations must preserve that ordering.
+
+## Images, browser sessions and expiry
+
+Image URLs generated through the `image` dispatch while rendering a validated
+access URL are signed using the validated signing user. They retain the parent
+link's exact expiry, including the absence of an expiry. This allows renderers
+without the visitor's login cookies to fetch protected images.
+
+Resources granted view access can also be registered for the visitor's session
+for four hours. These grants allow subsequent requests, such as survey pages,
+to access those resources without resending the original signature. Grants are
+kept in a site-specific ETS table on the current node and are lost when that
+table is recreated. The four-hour grant period is independent of the signed
+URL's expiry and can outlast it.
+
+The `_html_body.tpl` contribution uses `m.access_url.reload_needed` to reload a
+signed page after the Cotonic session cookie becomes available. Custom page
+layouts should include the standard Zotonic body contributions for this behavior.
+Image signatures themselves do not require a browser session.
+
+## Signature compatibility and diagnostics
+
+Verification accepts current Base64URL signatures and earlier Base64 signatures.
+Links without an expiry can also use the historical Erlang-term signatures,
+including the old `use_absolute_url` variant. Compatibility checks reconstruct
+server-side data; they never deserialize a term supplied by the requester.
+
+Failure logs distinguish `expired`, `invalid_expiry`, `malformed_signature`,
+`signature_mismatch` and `unknown_user_token`. Successful verification logs the
+signature format at debug level. These logs omit tokens, signatures and secrets.
+Added application parameters, including tracking parameters, invalidate a link.
+
+## Sharing and scope
+
+Anyone holding a valid link can use it. Share links only with intended recipients
+and avoid exposing them in public pages or logs. The signature binds the dispatch
+and application arguments; language and internal access-URL arguments are handled
+separately. It does not turn arbitrary links on the page into signed links.
+Validated responses receive a noindex header.
+
+The public `register_resource/2` helper records a session grant without checking
+ACLs itself. Use it only after authorizing access; `is_resource_registered/2`
+checks whether that session grant is still valid.
+").
+
 -author("Marc Worrell <marc@worrell.nl>").
 
 -mod_title("Access URL").
 -mod_description("Sign an URL for an user so that it can be used for accessing vcal feeds etc.").
--mod_prio(300).
+-mod_prio(10).
 
 -export([
     observe_url_rewrite/3,
@@ -55,7 +164,15 @@
 observe_url_rewrite(#url_rewrite{ dispatch = image, args = Args }, Url, Context) ->
     case z_context:get(is_z_access_url, Context) of
         true ->
-            maybe_add_token(image, Args, Url, Context);
+            case z_context:get(z_access_url_context, Context) of
+                #context{} = AccessContext ->
+                    % The request stays anonymous. Sign embedded images as the
+                    % validated user, without extending the parent URL's expiry.
+                    ValidFor = z_convert:to_binary(z_context:get(z_access_url_expires, Context)),
+                    maybe_add_token(image, Args, Url, ValidFor, AccessContext);
+                undefined ->
+                    Url
+            end;
         _False ->
             rewrite_if_access_url(image, Args, Url, Context)
     end;
@@ -225,14 +342,17 @@ table_name(SiteOrContext) ->
 %% @doc Add a token to the URL. This gives the opener of the URL access to the
 %% resources shown on the given URL, using the permissions of the current user.
 maybe_add_token(Dispatch, Args, Url, Context) ->
+    ValidFor = z_convert:to_binary(valid_for(Args, Context)),
+    maybe_add_token(Dispatch, Args, Url, ValidFor, Context).
+
+maybe_add_token(Dispatch, Args, Url, ValidFor, Context) ->
     case z_acl:user(Context) of
         undefined ->
             Url;
         UserId when is_integer(UserId) ->
-            ValidFor = z_convert:to_binary(valid_for(Args, Context)),
             {ok, Token, Secret} = user_secret(UserId, Context),
             Nonce = z_ids:id(),
-            SignedData = signed_data(Dispatch, Args, Token, Nonce, Secret, ValidFor),
+            SignedData = signed_data(Dispatch, transmitted_args(Args), Token, Nonce, Secret, ValidFor),
             Sig = encode_v1(SignedData),
             ExtraArgs = <<"z_access_url_token=", Token/binary,
                           "&z_access_url_nonce=", Nonce/binary,
@@ -241,9 +361,29 @@ maybe_add_token(Dispatch, Args, Url, Context) ->
                 ValidFor =:= <<>> -> ExtraArgs;
                 true -> <<ExtraArgs/binary, "&z_access_url_valid_for=", ValidFor/binary>>
             end,
-            case binary:match(Url, <<"?">>) of
-                nomatch -> <<Url/binary, $?, ExtraArgs1/binary>>;
-                _ -> <<Url/binary, $&, ExtraArgs1/binary>>
+            Url1 = remove_expiry_arg(Url),
+            case binary:match(Url1, <<"?">>) of
+                nomatch -> <<Url1/binary, $?, ExtraArgs1/binary>>;
+                _ -> <<Url1/binary, $&, ExtraArgs1/binary>>
+            end
+    end.
+
+%% The dispatcher may already have emitted the duration/date option. Replace
+%% it with the signed absolute expiry instead of sending two query values.
+remove_expiry_arg(Url) ->
+    case binary:split(Url, <<"?">>) of
+        [_] -> Url;
+        [Path, Query] ->
+            Separator = case binary:match(Query, <<"&amp;">>) of
+                nomatch -> <<"&">>;
+                _ -> <<"&amp;">>
+            end,
+            Query1 = binary:replace(Query, <<"&amp;">>, <<"&">>, [global]),
+            Parts = [ P || P <- binary:split(Query1, <<"&">>, [global]),
+                hd(binary:split(P, <<"=">>)) =/= <<"z_access_url_valid_for">> ],
+            case Parts of
+                [] -> Path;
+                _ -> iolist_to_binary([Path, $?, lists:join(Separator, Parts)])
             end
     end.
 
@@ -289,122 +429,142 @@ token_user(Token, Context) ->
 logon_if_sigok(Context) ->
     case z_context:get_controller_module(Context) of
         controller_http_error ->
-            % Ignore
             Context;
         _ ->
             Token = z_convert:to_binary(z_context:get_q(<<"z_access_url_token">>, Context)),
+            Dispatch = z_context:get_q(<<"zotonic_dispatch">>, Context),
             case token_user(Token, Context) of
                 {ok, UserId, Secret} ->
                     Nonce = z_context:get_q(<<"z_access_url_nonce">>, Context),
                     ValidFor = z_context:get_q(<<"z_access_url_valid_for">>, Context),
-                    Dispatch = z_context:get_q(<<"zotonic_dispatch">>, Context),
                     Sig = z_convert:to_binary(z_context:get_q(<<"z_access_url_sig">>, Context)),
-                    case is_valid_signature(Sig, Dispatch, get_q_all(Context), Token, Nonce, Secret, ValidFor) of
-                        true ->
-                            case is_valid_for(ValidFor) of
-                                true ->
+                    case verify_signature(Sig, Dispatch, get_q_all(Context), Token, Nonce, Secret, ValidFor) of
+                        {ok, Format} ->
+                            case expiry_status(ValidFor) of
+                                valid ->
                                     ?LOG_DEBUG(#{
                                         in => zotonic_mod_access_url,
-                                        text => <<"Valid url_access_token signature on request">>,
+                                        text => <<"Valid access URL signature on request">>,
                                         result => ok,
+                                        signature_format => Format,
                                         user_id => UserId,
-                                        path => cowmachine_req:raw_path(Context)
+                                        dispatch => Dispatch
                                     }),
                                     Context1 = z_context:set(is_z_access_url, true, Context),
                                     UserContext = z_acl:logon(UserId, z_context:new(Context)),
-                                    Context2 = z_context:set(z_access_url_context, UserContext, Context1),
+                                    Context2 = z_context:set([
+                                        {z_access_url_context, UserContext},
+                                        {z_access_url_expires, ValidFor}
+                                    ], Context1),
                                     z_context:set_noindex_header(true, Context2);
-                                false ->
+                                Reason ->
                                     ?LOG_INFO(#{
                                         in => zotonic_mod_access_url,
-                                        text => <<"Expired url_access_token signature on request">>,
+                                        text => <<"Access URL expiry check failed">>,
                                         result => error,
-                                        reason => signature_mismatch,
-                                        token => Token,
+                                        reason => Reason,
+                                        signature_format => Format,
                                         user_id => UserId,
-                                        valid_for => ValidFor,
-                                        now => z_datetime:timestamp(),
-                                        path => cowmachine_req:raw_path(Context)
+                                        dispatch => Dispatch
                                     }),
                                     Context
                             end;
-                        false ->
+                        {error, Reason} ->
                             ?LOG_WARNING(#{
                                 in => zotonic_mod_access_url,
-                                text => <<"Invalid url_access_token signature on request">>,
+                                text => <<"Access URL signature check failed">>,
                                 result => error,
-                                reason => signature_mismatch,
-                                token => Token,
+                                reason => Reason,
+                                signature_size => byte_size(Sig),
                                 user_id => UserId,
-                                path => cowmachine_req:raw_path(Context)
+                                dispatch => Dispatch
                             }),
                             Context
                     end;
                 {error, enoent} ->
                     ?LOG_INFO(#{
                         in => zotonic_mod_access_url,
-                        text => <<"Unknown url_access_token">>,
+                        text => <<"Unknown access URL token">>,
                         result => error,
                         reason => unknown_user_token,
-                        token => Token
+                        dispatch => Dispatch
                     }),
                     Context
             end
     end.
 
-is_valid_signature(Sig, Dispatch, Args, Token, Nonce, Secret, ValidFor) ->
+%% SHA-256 signatures have a fixed encoded length. Reject other lengths before
+%% serializing arguments. Never decode client data with binary_to_term/1.
+verify_signature(Sig, Dispatch, Args, Token, Nonce, Secret, ValidFor)
+    when byte_size(Sig) =:= 43; byte_size(Sig) =:= 44 ->
     Sig1 = fix_outlook_sig(Sig),
     Data = signed_data(Dispatch, Args, Token, Nonce, Secret, ValidFor),
-    case encode_v1(Data) of
-        Sig -> true;
-        Sig1 -> true;
+    Hash = crypto:hash(sha256, Data),
+    case {base64url:encode(Hash), base64:encode(Hash)} of
+        {Sig1, _} -> {ok, base64url};
+        {_, Sig1} -> {ok, base64};
+        _ when ValidFor =:= undefined; ValidFor =:= <<>> ->
+            verify_legacy(Sig1, Dispatch, filter_args(Args, []), Token, Nonce, Secret);
         _ ->
-            case encode_v2(Data) of
-                Sig -> true;
-                Sig1 -> true;
+            % Historical signatures did not bind an expiry. Never use them to
+            % validate a request carrying one, even when it is in the future.
+            {error, signature_mismatch}
+    end;
+verify_signature(_Sig, _Dispatch, _Args, _Token, _Nonce, _Secret, _ValidFor) ->
+    {error, malformed_signature}.
+
+%% At most three additional hashes, only after current-format verification fails.
+%% These are the exact structures emitted by the historical sign_args_old_* APIs.
+verify_legacy(Sig, Dispatch, Args, Token, Nonce, Secret) ->
+    Tail = [signed, z_convert:to_binary(Dispatch), z_convert:to_binary(Nonce),
+        z_convert:to_binary(Token), z_convert:to_binary(Secret)],
+    case legacy_signature([Args | Tail], 1) of
+        Sig -> {ok, legacy_term_v1};
+        _ ->
+            case legacy_signature([Args | Tail], 2) of
+                Sig -> {ok, legacy_term_v2};
                 _ ->
-                    % Check for old signatures which used term_to_binary/2
-                    % for the serialization of the signed data.
-                    HashedData_v1 = hash_term_v1(Data),
-                    case encode_v2(HashedData_v1) of
-                        Sig -> true;
-                        Sig1 -> true;
-                        _ ->
-                            HashedData_v2 = hash_term_v2(Data),
-                            case encode_v2(HashedData_v2) of
-                                Sig -> true;
-                                Sig1 -> true;
-                                _ -> false
-                            end
+                    OldArgs = lists:sort([{<<"use_absolute_url">>, <<"true">>} | Args]),
+                    case legacy_signature([OldArgs | Tail], 1) of
+                        Sig -> {ok, legacy_use_absolute_url};
+                        _ -> {error, signature_mismatch}
                     end
             end
     end.
 
-is_valid_for(undefined) ->
-    true;
-is_valid_for(<<>>) ->
-    true;
-is_valid_for(ValidFor) ->
+legacy_signature(Data, MinorVersion) ->
+    base64:encode(crypto:hash(sha256,
+        term_to_binary(Data, [{minor_version, MinorVersion}]))).
+
+expiry_status(undefined) -> valid;
+expiry_status(<<>>) -> valid;
+expiry_status(ValidFor) ->
     try
-        ValidForInt = z_convert:to_integer(ValidFor),
-        ValidForInt >= z_datetime:timestamp()
+        case z_convert:to_integer(ValidFor) >= z_datetime:timestamp() of
+            true -> valid;
+            false -> expired
+        end
     catch
-        _:_ -> false
+        _:_ -> invalid_expiry
     end.
 
 encode_v1(Data) ->
     base64url:encode(crypto:hash(sha256, Data)).
 
-encode_v2(Data) ->
-    base64:encode(crypto:hash(sha256, Data)).
-
-hash_term_v1(SignedData) ->
-    Data = term_to_binary(SignedData, [ {minor_version, 1} ]),
-    crypto:hash(sha256, Data).
-
-hash_term_v2(SignedData) ->
-    Data = term_to_binary(SignedData, [ {minor_version, 2} ]),
-    crypto:hash(sha256, Data).
+%% Match z_dispatcher:filter_empty_args/1 when signing, not when verifying.
+%% An attacker adding an empty application argument must still invalidate a URL.
+transmitted_args(Args) ->
+    lists:filter(
+        fun
+            ({_, <<>>}) -> false;
+            ({_, []}) -> false;
+            ({_, undefined}) -> false;
+            ({absolute_url, _}) -> false;
+            (absolute_url) -> false;
+            ({zotonic_http_accept, _}) -> false;
+            (_) -> true
+        end,
+        Args).
 
 signed_data(Dispatch, Args, Token, Nonce, Secret, ValidFor) when ValidFor =:= <<>>; ValidFor =:= undefined ->
     [
@@ -480,3 +640,90 @@ filter_args([{K,V}|Args], Acc) ->
 %% Outlook.com decodes and re-combines urls without doing percent-encoding.
 fix_outlook_sig(Sig) ->
     binary:replace(Sig, <<" ">>, <<"+">>, [ global ]).
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+signature_compatibility_test() ->
+    Args = [{<<"id">>, <<"123">>}],
+    Data = signed_data(page, Args, <<"token">>, <<"nonce">>, <<"secret">>, undefined),
+    Hash = crypto:hash(sha256, Data),
+    ?assertEqual({ok, base64url}, test_verify(base64url:encode(Hash), Args, undefined)),
+    ?assertEqual({ok, base64}, test_verify(base64:encode(Hash), Args, undefined)),
+    lists:foreach(
+        fun({Minor, Format}) ->
+            Sig = test_historical_signature(Args, Minor),
+            ?assertEqual({ok, Format}, test_verify(Sig, Args, undefined)),
+            ?assertEqual({ok, Format}, test_verify(Sig, Args, <<>>)),
+            ?assertEqual({error, signature_mismatch}, test_verify(Sig, Args, <<"2000000000">>)),
+            ?assertEqual({error, signature_mismatch}, test_verify(Sig, [{<<"id">>, <<"124">>}], undefined)),
+            ?assertEqual({error, signature_mismatch}, verify_signature(Sig, other_page, Args,
+                <<"token">>, <<"nonce">>, <<"secret">>, undefined)),
+            ?assertEqual({error, signature_mismatch}, verify_signature(Sig, page, Args,
+                <<"token">>, <<"nonce">>, <<"wrong-secret">>, undefined)),
+            ?assertEqual({error, signature_mismatch}, verify_signature(Sig, page, Args,
+                <<"token">>, <<"other-nonce">>, <<"secret">>, undefined))
+        end,
+        [{1, legacy_term_v1}, {2, legacy_term_v2}]),
+    OldArgs = lists:sort([{<<"use_absolute_url">>, <<"true">>} | Args]),
+    OldSig = test_historical_signature(OldArgs, 1),
+    ?assertEqual({ok, legacy_use_absolute_url}, test_verify(OldSig, Args, undefined)),
+    ?assertEqual({error, signature_mismatch}, test_verify(OldSig, Args, <<"2000000000">>)).
+
+%% Reproduce the old encoder independently of the compatibility helpers.
+test_historical_signature(Args, Minor) ->
+    base64:encode(crypto:hash(sha256, term_to_binary(
+        [Args, signed, <<"page">>, <<"nonce">>, <<"token">>, <<"secret">>],
+        [{minor_version, Minor}]))).
+
+test_verify(Sig, Args, Expiry) ->
+    verify_signature(Sig, page, Args, <<"token">>, <<"nonce">>, <<"secret">>, Expiry).
+
+signature_arguments_test() ->
+    Sent = [{<<"id">>, <<"123">>}],
+    Original = [{id,123}, {empty,<<>>}, {missing,undefined}, {list,[]},
+        absolute_url, {absolute_url,true}, {zotonic_http_accept,<<"application/pdf">>}],
+    Sig = encode_v1(signed_data(page, transmitted_args(Original),
+        <<"token">>, <<"nonce">>, <<"secret">>, undefined)),
+    ?assertEqual({ok, base64url}, test_verify(Sig, Sent, undefined)),
+    ?assertEqual({error, signature_mismatch}, test_verify(Sig, Sent ++ [{<<"empty">>, <<>>}], undefined)),
+    ?assertEqual({error, signature_mismatch}, test_verify(Sig, Sent ++ [{<<"utm_source">>, <<"mail">>}], undefined)),
+    Encoded = [{<<"value">>, unicode:characters_to_binary("a + b / 50% café & x=y")}],
+    RoundTrip = cow_qs:parse_qs(cow_qs:qs(Encoded)),
+    Sig1 = encode_v1(signed_data(page, Encoded, <<"token">>, <<"nonce">>, <<"secret">>, undefined)),
+    ?assertEqual({ok, base64url}, test_verify(Sig1, RoundTrip, undefined)).
+
+expiry_query_option_test() ->
+    ?assertEqual(<<"/page/123">>, remove_expiry_arg(<<"/page/123?z_access_url_valid_for=3600">>)),
+    ?assertEqual(<<"/page/123?id=123&x=a%26b">>,
+        remove_expiry_arg(<<"/page/123?id=123&z_access_url_valid_for=3600&x=a%26b">>)),
+    ?assertEqual(<<"/page/123?id=123&amp;x=a%26b">>,
+        remove_expiry_arg(<<"/page/123?id=123&amp;z_access_url_valid_for=%2Bday&amp;x=a%26b">>)).
+
+signature_expiry_test() ->
+    Args = [{<<"id">>, <<"123">>}],
+    Expiry = integer_to_binary(z_datetime:timestamp() + 3600),
+    Sig = encode_v1(signed_data(page, Args, <<"token">>, <<"nonce">>, <<"secret">>, Expiry)),
+    ?assertEqual({ok, base64url}, test_verify(Sig, Args, Expiry)),
+    ?assertEqual({error, signature_mismatch}, test_verify(Sig, Args, undefined)),
+    ?assertEqual(valid, expiry_status(Expiry)),
+    ?assertEqual(expired, expiry_status(<<"1">>)),
+    ?assertEqual(invalid_expiry, expiry_status(<<"not-a-date">>)),
+    ?assertEqual({error, malformed_signature}, test_verify(<<>>, Args, undefined)),
+    ?assertEqual({error, malformed_signature}, test_verify(binary:copy(<<"x">>, 10000), Args, undefined)).
+
+signature_outlook_test() ->
+    % Find a deterministic test nonce whose old Base64 signature contains '+'.
+    {Nonce, Sig} = hd([
+        {N, S}
+        || I <- lists:seq(1, 100),
+           N <- [integer_to_binary(I)],
+           S <- [base64:encode(crypto:hash(sha256,
+               signed_data(page, [], <<"token">>, N, <<"secret">>, undefined)))],
+           binary:match(S, <<"+">>) =/= nomatch
+    ]),
+    Damaged = binary:replace(Sig, <<"+">>, <<" ">>, [global]),
+    ?assertEqual({ok, base64}, verify_signature(Damaged, page, [],
+        <<"token">>, Nonce, <<"secret">>, undefined)).
+
+-endif.

@@ -5,6 +5,76 @@
 
 -module(m_access_url).
 
+-moduledoc(#{
+    zotonic_keywords => [
+        "reference", "model", "backend_developer", "frontend_developer",
+        "authorization_and_access_control", "security", "url"
+    ]
+}).
+-moduledoc("
+Generate absolute resource page URLs signed with the current user's view
+permissions. Requires `mod_access_url` to be enabled. Opening the link does not
+log the recipient in as the signer; see `mod_access_url` for permissions,
+embedded images, expiry and session grants.
+
+## Model paths
+
+### `generate`
+
+Accepts a payload map with binary keys:
+
+| Key | Meaning |
+| --- | --- |
+| `id` | Resource ID, name or another reference accepted by `m_rsc:rid/2`. |
+| `valid_for` | Optional integer duration in seconds or binary date expression such as `+day`. Omit for no expiry. |
+
+For example, the admin sharing widget calls this model through Cotonic:
+
+```javascript
+cotonic.broker.call(
+    \"bridge/origin/model/access_url/get/generate\",
+    {id: 123, valid_for: 3600}
+).then(msg => console.log(msg.payload.result));
+```
+
+The result is the signed URL, with HTML `&amp;` separators converted to `&` for
+use outside template markup. The model callback returns `{ok, {Url, Rest}}` or
+`{error, invalid}` when URL generation returns `undefined`.
+
+Generation requires an authenticated caller and reads the resource property
+`page_url_abs`, which is available without a resource view check. The model does
+not separately require view or edit permission to generate a URL. Access when
+the link is opened is still limited by the signer's view permissions. The admin
+widget additionally checks resource visibility before offering link generation.
+Treat generated URLs as access credentials.
+
+### `reload_needed`
+
+```django
+{% if m.access_url.reload_needed %}
+    {% wire action={reload} %}
+{% endif %}
+```
+
+Returns a boolean. It is true only for a validated access-URL HTTP request handled
+by `controller_page` or `controller_template` without a `cotonic-sid` cookie.
+Outside an HTTP request it is false. The module's `_html_body.tpl` already uses
+this path to establish the browser session needed for subsequent resource grants.
+
+## Erlang API
+
+```erlang
+Url = m_access_url:generate_url(Id, Context),
+TemporaryUrl = m_access_url:generate_url(Id, 3600, Context).
+```
+
+`generate_url/2` omits expiry; `generate_url/3` accepts the same `valid_for` values
+as the model payload. Both return a URL or `undefined` when there is no resource
+URL or the caller is not authenticated. These functions use the same permission
+checks as the model path. They do not perform the model callback's `&amp;`
+normalization.
+").
+
 -export([
     m_get/3,
 
